@@ -1,0 +1,59 @@
+name: Build mod
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.8'
+
+      - name: Unpack mod archive
+        run: |
+          set -e
+          ZIP=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
+          if [ -n "$ZIP" ]; then
+            echo "Unpacking $ZIP"
+            rm -rf _mod
+            mkdir _mod
+            unzip -q "$ZIP" -d _mod
+            BUILD_FILE=$(find _mod -maxdepth 3 -name build.gradle | head -n 1)
+          else
+            echo "No zip in repo root, building repository as is"
+            BUILD_FILE=$(find . -maxdepth 1 -name build.gradle | head -n 1)
+          fi
+          if [ -z "$BUILD_FILE" ]; then
+            echo "build.gradle not found"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$BUILD_FILE")" >> "$GITHUB_ENV"
+
+      - name: Build jar
+        run: |
+          cd "$PROJECT_DIR"
+          gradle build --no-daemon
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: avatar-mod-jar
+          path: ${{ env.PROJECT_DIR }}/build/libs/*.jar
+          if-no-files-found: error
